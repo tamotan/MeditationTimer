@@ -1,0 +1,200 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8" />
+    <title>瞑想時間タイマー V.05d</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            text-align: center;
+            margin-top: 40px;
+        }
+
+        .time {
+            font-size: 60px;
+            margin: 20px 0;
+        }
+
+        button {
+            font-size: 20px;
+            margin: 5px;
+            padding: 10px 20px;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+
+        .slider {
+            width: 200px;
+            vertical-align: middle;
+        }
+
+        .toggle {
+            display: inline-block;
+            position: relative;
+            width: 50px;
+            height: 26px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+
+        .toggle input { display: none; }
+
+        .slider-round {
+            position: absolute;
+            cursor: pointer;
+            background-color: #ccc;
+            border-radius: 26px;
+            top: 0; left: 0; right: 0; bottom: 0;
+            transition: .2s;
+        }
+
+        .slider-round:before {
+            content: "";
+            position: absolute;
+            height: 20px; width: 20px;
+            left: 3px; top: 3px;
+            background: white; border-radius: 50%;
+            transition: .2s;
+        }
+
+        .toggle input:checked + .slider-round { background-color: #4caf50; }
+        .toggle input:checked + .slider-round:before { transform: translateX(24px); }
+    </style>
+</head>
+<body>
+
+    <div id="app">
+        <h2>瞑想時間タイマー</h2>
+
+        <div class="time">{{ formattedTime }}</div>
+
+        <div>
+            <button @click="addMinutes(1)">1分</button>
+            <button @click="addMinutes(5)">5分</button>
+            <button @click="addMinutes(10)">10分</button>
+        </div>
+
+        <div class="controls">
+            <label>音量: {{ volume }}%</label>
+            <input class="slider" type="range" min="0" max="100" v-model="volume">
+            <span style="margin-left:20px;">増減切替</span>
+            <label class="toggle">
+                <input type="checkbox" v-model="decreaseMode">
+                <span class="slider-round"></span>
+            </label>
+            <span style="margin-left:8px;">(チェックで減少)</span>
+        </div>
+
+        <div style="margin-top:20px;">
+            <button @click="startTimer" :disabled="running">開始</button>
+            <button @click="stopTimer" :disabled="!running">停止</button>
+            <button @click="resetTimer">リセット</button>
+        </div>
+
+        <!-- ほら貝の音 音源はローカル-->
+        <audio ref="horn" src="audio/horagai1.mp3"></audio>
+
+    </div>
+
+    <script>
+const { createApp, ref, computed, watch } = Vue;
+
+createApp({
+  setup() {
+    const totalSeconds = ref(0);
+    const running = ref(false);
+    let timerId = null;
+
+    const horn = ref(null);
+    const decreaseMode = ref(false);
+    const volume = ref(10); // initial 10%
+
+    const formattedTime = computed(() => {
+      const m = String(Math.floor(totalSeconds.value / 60)).padStart(2, "0");
+      const s = String(totalSeconds.value % 60).padStart(2, "0");
+      return `${m}:${s}`;
+    });
+
+    const addMinutes = (min) => {
+      const delta = min * 60 * (decreaseMode.value ? -1 : 1);
+      totalSeconds.value = Math.max(0, totalSeconds.value + delta);
+    };
+
+    const startTimer = () => {
+      if (running.value || totalSeconds.value <= 0) return;
+      running.value = true;
+
+      // Try to "unlock" audio playback by playing and immediately pausing
+      // in direct response to the user's click. This avoids browser
+      // autoplay restrictions so we can call play() later when the
+      // timer finishes.
+      if (horn.value) {
+        // ensure initial volume
+        horn.value.volume = Math.min(1, Math.max(0, volume.value / 100));
+        if (typeof horn.value.play === 'function') {
+          horn.value.play().then(() => {
+            horn.value.pause();
+            horn.value.currentTime = 0;
+          }).catch(() => {
+            // ignore playback errors here; we'll still attempt to play at end
+          });
+        }
+      }
+
+      timerId = setInterval(() => {
+        if (totalSeconds.value > 0) {
+          totalSeconds.value--;
+        } else {
+          stopTimer();
+          if (horn.value) {
+            // play in loop until user stops
+            horn.value.loop = true;
+            horn.value.currentTime = 0;
+            horn.value.play().catch(() => {});
+          }
+        }
+      }, 1000);
+    };
+
+    const stopTimer = () => {
+      running.value = false;
+      clearInterval(timerId);
+      if (horn.value) {
+        horn.value.loop = false;
+        try {
+          horn.value.pause();
+          horn.value.currentTime = 0;
+        } catch (e) {}
+      }
+    };
+
+    const resetTimer = () => {
+      stopTimer();
+      totalSeconds.value = 0;
+    };
+
+    // keep audio volume in sync with slider
+    watch(volume, (v) => {
+      if (horn.value) horn.value.volume = Math.min(1, Math.max(0, v / 100));
+    });
+
+    return {
+      totalSeconds,
+      formattedTime,
+      running,
+      addMinutes,
+      startTimer,
+      stopTimer,
+      resetTimer,
+      horn,
+      decreaseMode,
+      volume
+    };
+  }
+}).mount("#app");
+    </script>
+
+</body>
+</html>
