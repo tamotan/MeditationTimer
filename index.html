@@ -1,200 +1,137 @@
 ﻿<!DOCTYPE html>
 <html lang="ja">
-<head>
+  <head>
     <meta charset="UTF-8" />
-    <title>瞑想時間タイマー V.05d</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>安寧のひととき V1.01</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <style>
-        body {
-            font-family: sans-serif;
-            text-align: center;
-            margin-top: 40px;
-        }
-
-        .time {
-            font-size: 60px;
-            margin: 20px 0;
-        }
-
-        button {
-            font-size: 20px;
-            margin: 5px;
-            padding: 10px 20px;
-        }
-        .controls {
-            margin-top: 20px;
-        }
-
-        .slider {
-            width: 200px;
-            vertical-align: middle;
-        }
-
-        .toggle {
-            display: inline-block;
-            position: relative;
-            width: 50px;
-            height: 26px;
-            margin-left: 8px;
-            vertical-align: middle;
-        }
-
-        .toggle input { display: none; }
-
-        .slider-round {
-            position: absolute;
-            cursor: pointer;
-            background-color: #ccc;
-            border-radius: 26px;
-            top: 0; left: 0; right: 0; bottom: 0;
-            transition: .2s;
-        }
-
-        .slider-round:before {
-            content: "";
-            position: absolute;
-            height: 20px; width: 20px;
-            left: 3px; top: 3px;
-            background: white; border-radius: 50%;
-            transition: .2s;
-        }
-
-        .toggle input:checked + .slider-round { background-color: #4caf50; }
-        .toggle input:checked + .slider-round:before { transform: translateX(24px); }
+      body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+      .time-display { font-size: 4rem; font-weight: 600; }
+      .btn-no-bg { background: transparent !important; border: none !important; box-shadow: none !important; }
+      .btn-no-bg:hover { background: transparent !important; }
+      .btn-no-bg:focus { box-shadow: none !important; outline: none !important; }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+      <div id="app" class="container py-5">
+          <div class="row justify-content-center">
+              <div class="col-12 col-md-8 col-lg-6">
+                  <div class="card shadow-sm">
+                      <div class="card-body">
+                          <h3 class="card-title text-center mb-3">安寧のひととき</h3>
 
-    <div id="app">
-        <h2>瞑想時間タイマー</h2>
+                          <div class="d-flex justify-content-center mb-3">
+                              <div class="time-display" aria-live="polite">{{ formattedTime }}</div>
+                          </div>
 
-        <div class="time">{{ formattedTime }}</div>
+                          <div class="d-flex justify-content-center gap-2 mb-3">
+                              <button class="btn btn-outline-primary btn-lg" @click="addMinutes(1)">1分</button>
+                              <button class="btn btn-outline-primary btn-lg" @click="addMinutes(5)">5分</button>
+                              <button class="btn btn-outline-primary btn-lg" @click="addMinutes(10)">10分</button>
+                          </div>
 
-        <div>
-            <button @click="addMinutes(1)">1分</button>
-            <button @click="addMinutes(5)">5分</button>
-            <button @click="addMinutes(10)">10分</button>
-        </div>
+                          <div class="row align-items-center mb-3">
+                              <div class="col-12 col-md-6">
+                                  <label class="form-label">音量: <strong>{{ volume }}%</strong></label>
+                                  <input type="range" class="form-range" min="0" max="100" v-model="volume">
+                              </div>
+                              <div class="col-12 col-md-6 text-md-end">
+                                  <div class="form-check form-switch d-inline-block">
+                                      <input class="form-check-input" type="checkbox" id="decreaseSwitch" v-model="decreaseMode">
+                                      <label class="form-check-label" for="decreaseSwitch">増減切替（チェックで減少）</label>
+                                  </div>
+                              </div>
+                          </div>
 
-        <div class="controls">
-            <label>音量: {{ volume }}%</label>
-            <input class="slider" type="range" min="0" max="100" v-model="volume">
-            <span style="margin-left:20px;">増減切替</span>
-            <label class="toggle">
-                <input type="checkbox" v-model="decreaseMode">
-                <span class="slider-round"></span>
-            </label>
-            <span style="margin-left:8px;">(チェックで減少)</span>
-        </div>
+              <div class="d-flex justify-content-center gap-2">
+                <button class="btn btn-outline-primary btn-lg" @click="startTimer" :disabled="running">開始</button>
+                <button class="btn btn-outline-primary btn-lg" @click="stopTimer" :disabled="!running">停止</button>
+                <button class="btn btn-outline-primary btn-lg" @click="resetTimer">リセット</button>
+              </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
 
-        <div style="margin-top:20px;">
-            <button @click="startTimer" :disabled="running">開始</button>
-            <button @click="stopTimer" :disabled="!running">停止</button>
-            <button @click="resetTimer">リセット</button>
-        </div>
-
-        <!-- ほら貝の音 音源はローカル-->
-        <audio ref="horn" src="audio/horagai1.mp3"></audio>
-
-    </div>
+          <!-- ほら貝の音 音源はローカルsrc="audio/horagai1.mp3"  -->
+          <audio ref="horn" src="audio/horagai1.mp3"></audio>
+      </div>
 
     <script>
-const { createApp, ref, computed, watch } = Vue;
+      const { createApp, ref, computed, watch } = Vue;
 
-createApp({
-  setup() {
-    const totalSeconds = ref(0);
-    const running = ref(false);
-    let timerId = null;
+      createApp({
+        setup() {
+          const totalSeconds = ref(0);
+          const running = ref(false);
+          let timerId = null;
 
-    const horn = ref(null);
-    const decreaseMode = ref(false);
-    const volume = ref(10); // initial 10%
+          const horn = ref(null);
+          const decreaseMode = ref(false);
+          const volume = ref(10); // initial 10%
 
-    const formattedTime = computed(() => {
-      const m = String(Math.floor(totalSeconds.value / 60)).padStart(2, "0");
-      const s = String(totalSeconds.value % 60).padStart(2, "0");
-      return `${m}:${s}`;
-    });
-
-    const addMinutes = (min) => {
-      const delta = min * 60 * (decreaseMode.value ? -1 : 1);
-      totalSeconds.value = Math.max(0, totalSeconds.value + delta);
-    };
-
-    const startTimer = () => {
-      if (running.value || totalSeconds.value <= 0) return;
-      running.value = true;
-
-      // Try to "unlock" audio playback by playing and immediately pausing
-      // in direct response to the user's click. This avoids browser
-      // autoplay restrictions so we can call play() later when the
-      // timer finishes.
-      if (horn.value) {
-        // ensure initial volume
-        horn.value.volume = Math.min(1, Math.max(0, volume.value / 100));
-        if (typeof horn.value.play === 'function') {
-          horn.value.play().then(() => {
-            horn.value.pause();
-            horn.value.currentTime = 0;
-          }).catch(() => {
-            // ignore playback errors here; we'll still attempt to play at end
+          const formattedTime = computed(() => {
+            const m = String(Math.floor(totalSeconds.value / 60)).padStart(2, "0");
+            const s = String(totalSeconds.value % 60).padStart(2, "0");
+            return `${m}:${s}`;
           });
+
+          const addMinutes = (min) => {
+            const delta = min * 60 * (decreaseMode.value ? -1 : 1);
+            totalSeconds.value = Math.max(0, totalSeconds.value + delta);
+          };
+
+          const startTimer = () => {
+            if (running.value || totalSeconds.value <= 0) return;
+            running.value = true;
+
+            if (horn.value) {
+              horn.value.volume = Math.min(1, Math.max(0, volume.value / 100));
+              if (typeof horn.value.play === 'function') {
+                horn.value.play().then(() => {
+                  horn.value.pause();
+                  horn.value.currentTime = 0;
+                }).catch(() => {});
+              }
+            }
+
+            timerId = setInterval(() => {
+              if (totalSeconds.value > 0) {
+                totalSeconds.value--;
+              } else {
+                stopTimer();
+                if (horn.value) {
+                  horn.value.loop = true;
+                  horn.value.currentTime = 0;
+                  horn.value.play().catch(() => {});
+                }
+              }
+            }, 1000);
+          };
+
+          const stopTimer = () => {
+            running.value = false;
+            clearInterval(timerId);
+            if (horn.value) {
+              horn.value.loop = false;
+              try { horn.value.pause(); horn.value.currentTime = 0; } catch (e) {}
+            }
+          };
+
+          const resetTimer = () => {
+            stopTimer();
+            totalSeconds.value = 0;
+          };
+
+          watch(volume, (v) => { if (horn.value) horn.value.volume = Math.min(1, Math.max(0, v / 100)); });
+
+          return { totalSeconds, formattedTime, running, addMinutes, startTimer, stopTimer, resetTimer, horn, decreaseMode, volume };
         }
-      }
-
-      timerId = setInterval(() => {
-        if (totalSeconds.value > 0) {
-          totalSeconds.value--;
-        } else {
-          stopTimer();
-          if (horn.value) {
-            // play in loop until user stops
-            horn.value.loop = true;
-            horn.value.currentTime = 0;
-            horn.value.play().catch(() => {});
-          }
-        }
-      }, 1000);
-    };
-
-    const stopTimer = () => {
-      running.value = false;
-      clearInterval(timerId);
-      if (horn.value) {
-        horn.value.loop = false;
-        try {
-          horn.value.pause();
-          horn.value.currentTime = 0;
-        } catch (e) {}
-      }
-    };
-
-    const resetTimer = () => {
-      stopTimer();
-      totalSeconds.value = 0;
-    };
-
-    // keep audio volume in sync with slider
-    watch(volume, (v) => {
-      if (horn.value) horn.value.volume = Math.min(1, Math.max(0, v / 100));
-    });
-
-    return {
-      totalSeconds,
-      formattedTime,
-      running,
-      addMinutes,
-      startTimer,
-      stopTimer,
-      resetTimer,
-      horn,
-      decreaseMode,
-      volume
-    };
-  }
-}).mount("#app");
+      }).mount('#app');
     </script>
 
-</body>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
 </html>
